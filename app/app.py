@@ -22,14 +22,10 @@ try:
     zonas_df, demanda_df, info = cargar_datos()
     st.success("✅ Datos y modelo cargados correctamente.")
 
-    # Pestañas para organizar la tarea
-    tab1, tab2 = st.tabs(["📈 Pronóstico Operacional (Parte 1)", "🗺️ Segmentación de Zonas (Parte 2)"])
+    tab1, tab2 = st.tabs(["📈 Pronóstico Operacional y Precisión", "🗺️ Segmentación de Zonas"])
 
     with tab1:
         st.subheader("Pronóstico de Demanda e Incertidumbre por Hora")
-        st.markdown("Selecciona una zona de la ciudad y el sistema te indicará cuántos viajes esperar y cuántos taxis enviar.")
-
-        # Selector de zonas disponibles para pronóstico
         zonas_disponibles = info.get("zonas", [])
         nombres_map = info.get("nombres_zonas", {})
         
@@ -37,26 +33,47 @@ try:
         zona_seleccionada = st.selectbox("Selecciona la Zona (LocationID):", options=list(opciones_zona.keys()), format_func=lambda x: opciones_zona[x])
 
         if zona_seleccionada:
-            # Filtrar datos de demanda para la zona seleccionada
             df_zona_demo = demanda_df[demanda_df["PULocationID"] == zona_seleccionada]
             
             if not df_zona_demo.empty:
-                st.markdown(f"### Resultados para: **{opciones_zona[zona_seleccionada]}**")
+                st.markdown(f"### Análisis para: **{opciones_zona[zona_seleccionada]}**")
                 
-                # Mostrar tabla de las horas proyectadas
-                st.dataframe(df_zona_demo[["fecha_hora", "viajes", "lag_168"]].rename(columns={
-                    "fecha_hora": "Fecha y Hora", 
-                    "viajes": "Viajes Reales / Históricos", 
-                    "lag_168": "Línea Base (Semana Anterior)"
-                }))
+                # CREAMOS DOS COLUMNAS: Izquierda la tabla, Derecha la precisión y métricas
+                col_tabla, col_precision = st.columns([2, 1])
+
+                with col_tabla:
+                    st.markdown("#### 📋 Tabla de Valores (Real vs Línea Base)")
+                    st.dataframe(df_zona_demo[["fecha_hora", "viajes", "lag_168"]].rename(columns={
+                        "fecha_hora": "Fecha y Hora", 
+                        "viajes": "Viajes Registrados", 
+                        "lag_168": "Línea Base (Semana Anterior)"
+                    }), use_container_width=True)
+
+                with col_precision:
+                    st.markdown("#### 🎯 Precisión y Desempeño")
+                    # Métraicas extraídas del JSON del modelo
+                    mae_mod = info["metricas"]["mae_modelo"]
+                    mae_base = info["metricas"]["mae_baseline"]
+                    cobertura = info["metricas"]["cobertura_banda"]
+
+                    st.metric(label="MAE del Modelo (p50)", value=f"{mae_mod:.2f}")
+                    st.metric(label="MAE Línea Base (lag_168)", value=f"{mae_base:.2f}")
+                    st.metric(label="Cobertura Banda [p10, p90]", value=f"{cobertura:.1f}%")
+
+                    st.info(
+                        "**Nota de Precisión:** "
+                        "El modelo evalúa la calidad de las predicciones de demanda por cuantiles, "
+                        "minimizando los errores operativos frente a los falsos positivos en la asignación de flotas."
+                    )
                 
-                st.info("💡 **Recomendación operativa:** Asigna unidades de flota considerando los picos esperados de demanda en esta franja horaria para evitar tiempos de espera elevados.")
+                st.markdown("---")
+                st.info("💡 **Recomendación operativa:** Asigna unidades de flota considerando los picos esperados de demanda en esta franja horaria.")
             else:
-                st.warning("No hay registros de pronóstico detallado para esta zona en el conjunto de prueba.")
+                st.warning("No hay registros detallados para esta zona.")
 
     with tab2:
         st.subheader("Segmentación de Zonas (K-Means y PCA)")
-        st.dataframe(zonas_df[["nombre_zona", "distrito", "nombre_grupo", "viajes_dia", "tarifa_mediana", "propina_mediana"]])
+        st.dataframe(zonas_df[["nombre_zona", "distrito", "nombre_grupo", "viajes_dia", "tarifa_mediana", "propina_mediana"]], use_container_width=True)
 
 except Exception as e:
-    st.error(f"⚠️ Error al cargar los componentes de la app. Verifica la estructura de archivos en GitHub (`app/data/...`). Detalle: {e}")
+    st.error(f"⚠️ Error al cargar los componentes. Detalle: {e}")
